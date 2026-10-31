@@ -1,0 +1,35 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: championsdb
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d championsdb"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+  mock-api:
+    image: nginx:alpine
+    volumes:
+      - ./src/main/resources/mock-api:/usr/share/nginx/html:ro
+  app:
+    image: ${APP_IMAGE}
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/championsdb
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      MATCHES_API_URL: http://mock-api/partidos.json
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      mock-api:
+        condition: service_started
+    restart: unless-stopped
+volumes:
+  postgres_data:

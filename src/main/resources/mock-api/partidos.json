@@ -1,0 +1,8 @@
+[
+ {"id":"ucl-001","local":"Real Madrid","visitante":"Manchester City","fecha":"2026-11-03T20:00:00","etapa":"Fase de liga (demo)"},
+ {"id":"ucl-002","local":"Barcelona","visitante":"Bayern Múnich","fecha":"2026-11-03T21:00:00","etapa":"Fase de liga (demo)"},
+ {"id":"ucl-003","local":"PSG","visitante":"Liverpool","fecha":"2026-11-04T20:00:00","etapa":"Fase de liga (demo)"},
+ {"id":"ucl-004","local":"Arsenal","visitante":"Inter de Milán","fecha":"2026-11-04T21:00:00","etapa":"Fase de liga (demo)"},
+ {"id":"ucl-005","local":"Chelsea","visitante":"Atlético de Madrid","fecha":"2026-11-05T20:00:00","etapa":"Fase de liga (demo)"},
+ {"id":"ucl-006","local":"Borussia Dortmund","visitante":"Juventus","fecha":"2026-11-05T21:00:00","etapa":"Fase de liga (demo)"}
+]
