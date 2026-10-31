@@ -1,81 +1,129 @@
 # Laboratorio 5 — Pregunta 1 — Champions Predictor
 
-Aplicación Java 21 / Spring Boot 3.5.7, en arquitectura de tres capas, con API simulada, PostgreSQL, Docker y AWS.
+Aplicación web desarrollada en **Java 21 y Spring Boot 3.5.7** para la gestión de partidos de demostración de Champions League y registro de predicciones. Implementa arquitectura de **tres capas**, PostgreSQL, Docker Compose y despliegue en AWS EC2.
 
-## Arquitectura
+**Repositorio:** https://github.com/VascoBustamante/champions-predictor-lab5  
+**Imagen publicada:** https://hub.docker.com/r/vascobustamante/champions-predictor (`1.0`)  
+**Demo en AWS (mientras EC2 esté encendida y conserve su IP):** http://3.147.28.41:8080
 
-- **Presentación**: `WebController` + plantillas Thymeleaf (`templates`) y CSS.
-- **Negocio**: `PartidoService` importa partidos al iniciar; `PrediccionService` valida el resultado y guarda pronósticos.
-- **Acceso a datos**: repositorios Spring Data JPA, entidades Partido y Prediccion, PostgreSQL.
+> Los seis encuentros son **datos ficticios de prueba**, obtenidos de una API simulada. No representan un calendario oficial de UEFA.
 
-Flujo de datos: `nginx (API simulada JSON) -> PartidoService (GET al iniciar) -> PartidoRepository -> PostgreSQL`. El usuario interactúa con `Thymeleaf -> WebController -> PrediccionService -> PrediccionRepository -> PostgreSQL`. Las tablas se crean mediante JPA (`ddl-auto=update`, adecuado para laboratorio).
+## Arquitectura y flujo de datos
 
-Los partidos del JSON son **inventados para demostración**, no un calendario oficial de la UEFA.
+| Capa | Componentes | Responsabilidad |
+|---|---|---|
+| Presentación | `WebController`, `ApiController`, Thymeleaf, HTML/CSS | Lista partidos, recibe formularios y ofrece endpoints JSON. |
+| Lógica de negocio | `PartidoService`, `PrediccionService` | Importa partidos al arrancar, valida marcador/ganador y registra predicciones. |
+| Acceso a datos | `PartidoRepository`, `PrediccionRepository`, Spring Data JPA, PostgreSQL | Almacena y recupera partidos y predicciones. |
+
+**Carga inicial:** contenedor `mock-api` (nginx) → `GET /partidos.json` → `PartidoService` (`ApplicationRunner`) → `PartidoRepository` → PostgreSQL. Al reiniciar, el servicio evita duplicados mediante `externalId`.
+
+**Predicción:** navegador → `POST /predicciones` → `WebController` → `PrediccionService` → validación (el ganador/empate debe coincidir con los goles) → `PrediccionRepository` → PostgreSQL → confirmación.
+
+**Consulta:** navegador → `GET /predicciones` → `WebController` → `PrediccionService` → repositorio → PostgreSQL → plantilla `predicciones.html`.
+
+La base de datos reside en el volumen Docker `postgres_data`. `docker compose down` no elimina los datos; **`docker compose down -v` sí los elimina**.
 
 ## Requisitos
 
-- IntelliJ IDEA, JDK 21 y Docker Desktop con Docker Compose v2.
-- Opcional: Maven instalado localmente (para compilar fuera de Docker).
+- Java JDK 21 e IntelliJ IDEA (opcional para ejecución Docker).
+- Docker Desktop con Docker Compose v2 para Windows.
+- Cuenta en Docker Hub y AWS solo para publicación y despliegue.
 
-## Ejecución local completa (PowerShell, desde la carpeta del proyecto)
+## Ejecución local (Windows / IntelliJ)
+
+Abrir la carpeta que contiene `docker-compose.yml` y ejecutar en PowerShell:
 
 ```powershell
 docker compose up --build -d
 docker compose ps
-docker compose logs -f app
+docker compose logs --tail=50 app
 ```
 
-Abrir `http://localhost:8080` y `http://localhost:8080/predicciones`.
+Visitar: `http://localhost:8080`, `http://localhost:8080/predicciones` y `http://localhost:8080/api/partidos`.
 
-Para detener sin borrar datos: `docker compose down`. Para reiniciar: `docker compose up -d`.
+**Importante:** En el equipo utilizado para este laboratorio, Windows bloqueó el puerto 5433. Se cambió **solo el puerto publicado de PostgreSQL** en `docker-compose.yml` a:
 
-**ADVERTENCIA**: `docker compose down -v` borra las predicciones de la base de datos.
+```yaml
+ports:
+  - "127.0.0.1:5435:5432"
+```
 
-## Ejecutar Java desde IntelliJ (modo desarrollo)
+Si ocurre el mismo error en otro equipo, aplicar este cambio. No afecta la conexión entre contenedores, que continúa utilizando `db:5432`. Si se ejecuta **Java fuera de Docker**, configurar la URL de base de datos a `jdbc:postgresql://localhost:5435/championsdb` y mantener la API en `http://localhost:8091/partidos.json`. Antes, detener el servicio `app` de Docker (`docker compose stop app`) y dejar `db` y `mock-api` encendidos. Puede configurarse mediante la variable `DB_URL`.
 
-Iniciar solo PostgreSQL y API:
+Para detener sin eliminar el volumen:
 
 ```powershell
-docker compose up -d db mock-api
+docker compose down
 ```
 
-Abrir proyecto con `File > Open` seleccionando la carpeta, esperar la sincronización Maven, configurar SDK 21 e iniciar `ChampionsApplication.java` con el botón de reproducción. Usa `localhost:5433` y `localhost:8091` por defecto. No iniciar simultáneamente el servicio `app` de Compose porque ocupará el puerto 8080.
+## Verificación funcional
 
-## Verificación de requisitos
+1. Ir a `/` y comprobar que aparecen seis partidos de prueba.
+2. Abrir `/api/partidos` y comprobar la respuesta JSON.
+3. Registrar una predicción coherente, por ejemplo resultado LOCAL, 2-1.
+4. Abrir `/predicciones` y comprobar que aparece.
+5. Comprobar las tablas y la persistencia con los siguientes comandos:
 
-1. `http://localhost:8091/partidos.json` muestra API simulada (solo en local).
-2. `http://localhost:8080/api/partidos` muestra partidos importados a PostgreSQL.
-3. En la portada, escoger un partido, resultado y goles coherentes (p.ej. LOCAL, 2-1), guardar.
-4. `http://localhost:8080/predicciones` lista los pronósticos.
-5. `docker compose restart app`; las predicciones persisten.
-6. Base de datos: `docker compose exec db psql -U champions -d championsdb -c "SELECT * FROM predicciones;"` (cambiar usuario si corresponde).
+```powershell
+docker compose exec db psql -U champions -d championsdb -c "SELECT COUNT(*) FROM partidos;"
+docker compose exec db psql -U champions -d championsdb -c "SELECT COUNT(*) FROM predicciones;"
+docker compose restart
+docker compose exec db psql -U champions -d championsdb -c "SELECT COUNT(*) FROM predicciones;"
+```
+
+En la ejecución local de prueba se verificaron **6 partidos y 1 predicción conservada tras el reinicio**. En AWS se verificó el listado de partidos y los tres contenedores activos; el registro/consulta de una predicción en AWS debe demostrarse como evidencia final.
 
 ## Docker Hub
 
+Imagen publicada: `vascobustamante/champions-predictor:1.0`.
+
+Para reconstruir y publicar una nueva versión desde Windows:
+
 ```powershell
 docker login
-docker build -t TU_USUARIO_DOCKERHUB/champions-predictor:1.0 .
-docker push TU_USUARIO_DOCKERHUB/champions-predictor:1.0
+docker build -t vascobustamante/champions-predictor:1.0 .
+docker push vascobustamante/champions-predictor:1.0
 ```
 
-## AWS EC2
+## Despliegue en AWS EC2
 
-Crear instancia Ubuntu, abrir el puerto 22 solo desde tu IP y 8080 para la demostración, instalar Docker Engine y Docker Compose Plugin siguiendo https://docs.docker.com/engine/install/ubuntu/ . Clonar repositorio y configurar `.env` basado en `.env.example` con contraseña fuerte y el nombre real de la imagen publicada. Ejecutar:
+- Instancia EC2 Ubuntu 24.04 LTS, `t3.small`, 20 GiB de volumen gp3.
+- Grupo de seguridad: TCP 22 restringido a IP autorizada, TCP 8080 habilitado para demostración; no abrir PostgreSQL al exterior.
+- Instalar Docker Engine y Compose plugin siguiendo https://docs.docker.com/engine/install/ubuntu/ .
+- Conectar por SSH (desde Windows; utilizar el nombre real de la clave descargada):
+
+```powershell
+ssh -i "$env:USERPROFILE\Downloads\key.pem" ubuntu@3.147.28.41
+```
+
+- En Ubuntu:
 
 ```bash
-docker login
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml up -d
-docker compose -f docker-compose.prod.yml ps
+git clone https://github.com/VascoBustamante/champions-predictor-lab5.git
+cd champions-predictor-lab5
+cp .env.example .env
+nano .env
+chmod 600 .env
+sudo docker compose -f docker-compose.prod.yml pull
+sudo docker compose -f docker-compose.prod.yml up -d
+sudo docker compose -f docker-compose.prod.yml ps
+sudo docker compose -f docker-compose.prod.yml logs --tail=50 app
 ```
 
-Abrir `http://IP_PUBLICA:8080`. El archivo `docker-compose.prod.yml` utiliza la imagen remota; no compila en la instancia. El usuario de Docker Hub debe haber publicado la imagen antes.
+`.env` debe contener `DB_USER=champions`, una `DB_PASSWORD` **segura y privada** y `APP_IMAGE=vascobustamante/champions-predictor:1.0`. **No subir `.env` al repositorio.** La configuración de producción descarga la imagen de Docker Hub y utiliza el volumen `postgres_data` para PostgreSQL.
 
-Seguridad para demostración: no subir `.env`, no exponer PostgreSQL, limitar SSH a IP de confianza y eliminar recursos de AWS al finalizar para evitar cargos. En un entorno real usar HTTPS con dominio y proxy inverso; este laboratorio usa HTTP por simplicidad.
+**Acceso:** http://3.147.28.41:8080 mientras la IP pública siga asignada. Tras detener/iniciar EC2, la IP puede cambiar si no está reservada. El servicio de demostración utiliza HTTP; para producción real se recomienda HTTPS y controles adicionales.
 
-## Evidencias sugeridas
+## Evidencias y entrega
 
-- UI de partidos; predicción guardada; lista de predicciones; respuesta de `/api/partidos`.
-- Diagrama de arquitectura; `docker compose ps`; Docker Hub con imagen publicada.
-- EC2 ejecutándose; web funcionando a través de IP pública; volumen `postgres_data`.
-- Video de hasta cinco minutos mostrando estos puntos.
+- Captura de la portada en AWS mostrando los seis partidos.
+- Captura del formulario y de `/predicciones` tras guardar un pronóstico en AWS.
+- Captura de `/api/partidos` (JSON).
+- Captura de `sudo docker compose -f docker-compose.prod.yml ps` con `app`, `db` y `mock-api`.
+- Captura de la imagen publicada en Docker Hub.
+- Captura del estado `Running` de la instancia EC2.
+- Diagrama de arquitectura y explicación del flujo de datos.
+- URL de este repositorio y video explicativo de **máximo cinco minutos**.
+
+Al terminar la demostración, revisar el gasto de AWS y detener o eliminar los recursos que ya no sean necesarios.
